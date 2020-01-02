@@ -2,14 +2,23 @@ import os
 from datetime import datetime
 import gzip
 from collections import defaultdict
-
+import logging
+import logging.config 
 
 config = {
     "REPORT_SIZE": 1000,
     "REPORT_DIR": "./reports",
     "REPORT_TEMPLATE": "report.html",
-    "LOG_DIR": "./log"
+    "LOG_DIR": "./log",
+    "LOG_NAME": None,
 }
+
+# Set logging
+logging.basicConfig(format="[%(asctime)s] %(levelname).1s %(message)s", 
+        datefmt="%Y.%m.%d %H:%M:%S", level=logging.INFO)
+if config["LOG_NAME"] is not None:
+    logging.fileConfig(os.path.join(config["LOG_DIR"], config["LOG_NAME"]))
+
 
 def split_by_space(s, item_symbols=("\"", "[", "]")):
     """
@@ -72,6 +81,16 @@ def open_logfile(path):
     return open(path, 'r') 
 
 
+def calc_median(vals):
+    vals_sorted = sorted(vals)
+    mi = len(vals) // 2
+    if len(vals_sorted) % 2 == 0:
+        median = (vals_sorted[mi-1] + vals_sorted[mi]) / 2
+    else:
+        median = vals_sorted[mi]
+    return median
+
+
 def analyze_log(data):
     time_dict = defaultdict(lambda: {'request_time': []})
     for log_record in data:
@@ -79,10 +98,19 @@ def analyze_log(data):
         request_time = log_record["request_time"]
         time_dict[request]['request_time'].append(request_time)
 
+    n_requests_total = sum([len(rq) for rq in time_dict])
+    time_total = sum([sum(time_dict[rq]["request_time"]) for rq in time_dict])
     stats = []
     for req in time_dict:
+        req_time = round(sum(time_dict[req]["request_time"]), 4)
         stats.append({
             "url": req,
+            "count": len(time_dict[req]),
+            "count_perc": round(len(time_dict[req]) / n_requests_total, 6),
+            "time_sum": req_time,
+            "time_perc": round(req_time / time_total, 4),
+            "time_med": round(calc_median(time_dict[req]['request_time']), 4),
+            "time_avg": round(req_time / len(time_dict[req]), 4),
             "max": max(time_dict[req]['request_time']),
             "min": min(time_dict[req]['request_time'])
         })
@@ -99,7 +127,7 @@ def parse_json(stats, config):
     date = str(datetime.date(datetime.now()))
     fn = f"report-{date}.html"
     report_path = os.path.join(config["REPORT_DIR"], fn)
-    print("Report path: ", report_path)
+    logging.info(f"Report destination path: {report_path}")
 
     with open(config["REPORT_TEMPLATE"], "r") as f:
         report_html = f.read()
@@ -111,7 +139,7 @@ def parse_json(stats, config):
 
     with open(report_path, 'w') as f:
         f.write(report_out)
-    print(f"Report written to the {report_path}")
+    logging.warning(f"Report has been written successfully.")
 
 
 def main():
@@ -119,11 +147,14 @@ def main():
     data = []
     with open_logfile(path) as f:
         for i, line in enumerate(f.readlines()):
+            if (i+1) % 1_000 == 0:
+                logging.info(f"Processed {i+1} files")
             data.append(process_log_line(parse_line(str(line))))
+    logging.info("Log was parsed successfully.")
 
-    print(f"Log contains {len(data)} records")
+    logging.info(f"Log contains {len(data)} records")
     stats = analyze_log(data)
-    print(f"Stats contains {len(stats)} requests") 
+    logging.info(f"Stats contains {len(stats)} requests") 
     parse_json(stats, config)
 
 
