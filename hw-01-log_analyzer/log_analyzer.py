@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from datetime import date
 import gzip
 from collections import defaultdict
 import logging
@@ -10,13 +11,13 @@ config = {
     "REPORT_DIR": "./reports",
     "REPORT_TEMPLATE": "report.html",
     "LOG_DIR": "./log",
-    "LOG_NAME": None,
+    "LOG": None,
 }
 
 # Set logging
 logging.basicConfig(format="[%(asctime)s] %(levelname).1s %(message)s", 
         datefmt="%Y.%m.%d %H:%M:%S", level=logging.INFO)
-if config["LOG_NAME"] is not None:
+if config["LOG"] is not None:
     logging.fileConfig(os.path.join(config["LOG_DIR"], config["LOG_NAME"]))
 
 
@@ -103,12 +104,13 @@ def analyze_log(data):
     stats = []
     for req in time_dict:
         req_time = round(sum(time_dict[req]["request_time"]), 4)
+        n_count = len(time_dict[req]["request_time"])
         stats.append({
             "url": req,
-            "count": len(time_dict[req]),
-            "count_perc": round(len(time_dict[req]) / n_requests_total, 6),
+            "count": n_count,
+            "count_perc": round(n_count / n_requests_total, 8),
             "time_sum": req_time,
-            "time_perc": round(req_time / time_total, 4),
+            "time_perc": round(req_time / time_total, 8),
             "time_med": round(calc_median(time_dict[req]['request_time']), 4),
             "time_avg": round(req_time / len(time_dict[req]), 4),
             "max": max(time_dict[req]['request_time']),
@@ -142,13 +144,40 @@ def parse_json(stats, config):
     logging.warning(f"Report has been written successfully.")
 
 
+def select_recent_log(log_dir):
+    """Select most recent log from given directory.
+
+    Selection will look only in the given folder non-recursevely.
+    Logs have format of logname-yyyymmdd.log[.gz]
+
+    Args:
+        log_dir (str): direcotry with logs.
+
+    Returns:
+        str: path to the most recent log.
+    """
+    fns = {}
+    for root, _, files in os.walk(log_dir):
+        for fn in files:
+            if fn.endswith('.gz') or fn.endswith('.txt'):
+                datestr = fn[fn.rfind('-')+1:fn.rfind('.')]
+            else:
+                datestr = fn[fn.rfind('-')+1:]
+            k = os.path.join(root, fn)
+            v = date(int(datestr[:4]), int(datestr[4:6]), int(datestr[6:8]))
+            fns[k] = v
+    return max(fns)
+
+
 def main():
-    path = 'nginx-access-ui.log-20170629'
+    path = select_recent_log(config["LOG_DIR"])
+    logging.info(f"Processing {path}")
+
     data = []
     with open_logfile(path) as f:
         for i, line in enumerate(f.readlines()):
-            if (i+1) % 1_000 == 0:
-                logging.info(f"Processed {i+1} files")
+            if (i+1) % 100_000 == 0:
+                logging.info(f"Processed {i+1} records")
             data.append(process_log_line(parse_line(str(line))))
     logging.info("Log was parsed successfully.")
 
