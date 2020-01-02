@@ -1,3 +1,5 @@
+import os
+from datetime import datetime
 import gzip
 from collections import defaultdict
 
@@ -5,6 +7,7 @@ from collections import defaultdict
 config = {
     "REPORT_SIZE": 1000,
     "REPORT_DIR": "./reports",
+    "REPORT_TEMPLATE": "report.html",
     "LOG_DIR": "./log"
 }
 
@@ -52,13 +55,14 @@ def process_log_line(log_dict):
     """
     Process elements of log line.
     """
-    def remove_redundant(s):
+    def remove_symbols(s):
         to_remove = ["\\n", "\\"]
         for c in to_remove:
             s = s.replace(c, "")
         return s
 
-    log_dict["request_time"] = float(remove_redundant(log_dict["request_time"]))
+    log_dict["request_time"] = float(remove_symbols(log_dict["request_time"]))
+    log_dict["request"] = log_dict["request"].replace("GET ", "")
     return log_dict
 
 
@@ -68,6 +72,48 @@ def open_logfile(path):
     return open(path, 'r') 
 
 
+def analyze_log(data):
+    time_dict = defaultdict(lambda: {'request_time': []})
+    for log_record in data:
+        request = log_record["request"]
+        request_time = log_record["request_time"]
+        time_dict[request]['request_time'].append(request_time)
+
+    stats = []
+    for req in time_dict:
+        stats.append({
+            "url": req,
+            "max": max(time_dict[req]['request_time']),
+            "min": min(time_dict[req]['request_time'])
+        })
+
+    return stats
+
+
+def parse_json(stats, config):
+    """
+    Parse json stats to the html report.
+    """
+    if not os.path.exists(config["REPORT_DIR"]):
+        os.makedirs(config["REPORT_DIR"])
+    date = str(datetime.date(datetime.now()))
+    fn = f"report-{date}.html"
+    report_path = os.path.join(config["REPORT_DIR"], fn)
+    print("Report path: ", report_path)
+
+    with open(config["REPORT_TEMPLATE"], "r") as f:
+        report_html = f.read()
+
+    target_tag = "$table_json"
+    ind_start = report_html.find(target_tag)
+    report_out = report_html[:ind_start] + str(stats) + \
+         report_html[ind_start+len(target_tag):]
+
+    with open(report_path, 'w') as f:
+        f.write(report_out)
+    print(f"Report written to the {report_path}")
+
+
 def main():
     path = 'nginx-access-ui.log-20170629'
     data = []
@@ -75,9 +121,10 @@ def main():
         for i, line in enumerate(f.readlines()):
             data.append(process_log_line(parse_line(str(line))))
 
-    print(f"Log contains {len(data)} records") 
-
-
+    print(f"Log contains {len(data)} records")
+    stats = analyze_log(data)
+    print(f"Stats contains {len(stats)} requests") 
+    parse_json(stats, config)
 
 
 if __name__ == "__main__":
