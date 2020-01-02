@@ -4,7 +4,7 @@ from datetime import date
 import gzip
 from collections import defaultdict
 import logging
-import logging.config 
+import logging.config
 
 config = {
     "REPORT_SIZE": 1000,
@@ -15,15 +15,21 @@ config = {
 }
 
 # Set logging
-logging.basicConfig(format="[%(asctime)s] %(levelname).1s %(message)s", 
-        datefmt="%Y.%m.%d %H:%M:%S", level=logging.INFO)
+logging.basicConfig(format="[%(asctime)s] %(levelname).1s %(message)s",
+                    datefmt="%Y.%m.%d %H:%M:%S", level=logging.INFO)
 if config["LOG"] is not None:
     logging.fileConfig(os.path.join(config["LOG_DIR"], config["LOG_NAME"]))
 
 
 def split_by_space(s, item_symbols=("\"", "[", "]")):
-    """
-    Split line by spaces but do not split contenst inside quotes.
+    """Split line by spaces but do not split contenst inside quotes.
+
+    Args:
+        s (str): log record.
+        item_symbols (tuple): tuple of symbols treated as start/end log entity.
+
+    Returns:
+        list: list of parsed log items.
     """
     items = []
     i_start = 0
@@ -43,27 +49,37 @@ def split_by_space(s, item_symbols=("\"", "[", "]")):
 
 
 def parse_line(s):
-    """
-    Parse log line according to log format.
+    """Parse log line according to log format.
 
-
-    log_format ui_short $remote_addr  $remote_user $http_x_real_ip [$time_local] 
+    log_format  $remote_addr  $remote_user $http_x_real_ip [$time_local]
                   "$request" ''$status $body_bytes_sent "$http_referer"
-                  "$http_user_agent" "$http_x_forwarded_for" 
-                  "$http_X_REQUEST_ID" "$http_X_RB_USER" 
+                  "$http_user_agent" "$http_x_forwarded_for"
+                  "$http_X_REQUEST_ID" "$http_X_RB_USER"
                   $request_time;
+
+    Args:
+        s (str): log line.
+
+    Returns:
+        dict: dict with keys as log item name.
     """
-    item_names = ["remote_addr", "remote_user", "http_x_real_ip", "time_local", 
-            "request", "status", "body_bytes_sent", "http_referer", 
-            "http_user_agent", "http_x_forwarded_for",
-            "http_X_REQUEST_ID", "http_X_RB_USER", "request_time"]
+    item_names = ["remote_addr", "remote_user", "http_x_real_ip", "time_local",
+                  "request", "status", "body_bytes_sent", "http_referer",
+                  "http_user_agent", "http_x_forwarded_for",
+                  "http_X_REQUEST_ID", "http_X_RB_USER", "request_time"]
     item_vals = split_by_space(s)
-    return {k:v for k, v in zip(item_names, item_vals)}
+    return {k: v for k, v in zip(item_names, item_vals)}
 
 
 def process_log_line(log_dict):
     """
     Process elements of log line.
+
+    Args:
+        log_dict (dict): dict with log record.
+
+    Returns:
+        dict: dict with some values processed.
     """
     def remove_symbols(s):
         to_remove = ["\\n", "\\"]
@@ -79,7 +95,7 @@ def process_log_line(log_dict):
 def open_logfile(path):
     if path.endswith(".gz"):
         return gzip.open(path, 'rb')
-    return open(path, 'r') 
+    return open(path, 'r')
 
 
 def calc_median(vals):
@@ -93,6 +109,14 @@ def calc_median(vals):
 
 
 def analyze_log(data):
+    """Process stats from given log data.
+
+    Args:
+        data (list): list of dicts of records.
+
+    Returns:
+        list: list of dicts with record stats.
+    """
     time_dict = defaultdict(lambda: {'request_time': []})
     for log_record in data:
         request = log_record["request"]
@@ -121,8 +145,11 @@ def analyze_log(data):
 
 
 def parse_json(stats, config):
-    """
-    Parse json stats to the html report.
+    """Parse json stats to the html report.
+
+    Args:
+        stats (list): list of dicts with stats.
+        config (dict): configuration.
     """
     if not os.path.exists(config["REPORT_DIR"]):
         os.makedirs(config["REPORT_DIR"])
@@ -137,7 +164,7 @@ def parse_json(stats, config):
     target_tag = "$table_json"
     ind_start = report_html.find(target_tag)
     report_out = report_html[:ind_start] + str(stats) + \
-         report_html[ind_start+len(target_tag):]
+        report_html[ind_start+len(target_tag):]
 
     with open(report_path, 'w') as f:
         f.write(report_out)
@@ -169,7 +196,12 @@ def select_recent_log(log_dir):
     return max(fns)
 
 
-def main():
+def build_report(config):
+    """Process log file and create html report.
+
+    Args:
+        config (dict): configuration file.
+    """
     path = select_recent_log(config["LOG_DIR"])
     logging.info(f"Processing {path}")
 
@@ -183,8 +215,12 @@ def main():
 
     logging.info(f"Log contains {len(data)} records")
     stats = analyze_log(data)
-    logging.info(f"Stats contains {len(stats)} requests") 
+    logging.info(f"Stats contains {len(stats)} requests")
     parse_json(stats, config)
+
+
+def main():
+    build_report(config)
 
 
 if __name__ == "__main__":
