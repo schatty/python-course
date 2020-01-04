@@ -16,7 +16,7 @@ def get_cur_date():
 def convert_plain_to_gz(fn):
     with open(fn, 'r') as f:
         data = f.read()
-    with gzip.open(fn + ".gz", 'wb') as f:
+    with gzip.open(fn[:-3] + ".gz", 'wb') as f:
         f.write(data.encode())
     os.system(f"rm {fn}")
 
@@ -24,7 +24,7 @@ def convert_plain_to_gz(fn):
 def convert_gz_to_plain(fn):
     with gzip.open(fn, 'rb') as f:
         data = f.read().decode("utf-8")
-    with open(fn[:-3], 'w') as f:
+    with open(fn[:-3] + ".log", 'w') as f:
         f.write(data)
     os.system(f"rm {fn}")
 
@@ -73,13 +73,10 @@ class TestLogAnalyzer(unittest.TestCase):
             "ERROR_RATE_THRESHOLD": 0.7
         }
         if not os.path.exists(cls.config["LOG_DIR"]):
-            print("Generating test logs...")
             os.makedirs(cls.config["LOG_DIR"])
-            generate_logs("log-10k-20190102.gz", cls.config["LOG_DIR"], 10)
-        else:
-            print("Test logs exists. Skipping generation.")
-            if not os.path.exists(cls.config["REPORT_DIR"]):
-                os.makedirs(cls.config["REPORT_DIR"])
+        generate_logs("log-10k-20190102.gz", cls.config["LOG_DIR"], 10)
+        if not os.path.exists(cls.config["REPORT_DIR"]):
+            os.makedirs(cls.config["REPORT_DIR"])
 
     @classmethod
     def tearDownClass(cls):
@@ -90,6 +87,8 @@ class TestLogAnalyzer(unittest.TestCase):
         """Test that if given directory with logs no exists. """
         old_log_dir = self.config["LOG_DIR"]
         new_log_dir = "noexisting"
+        if not os.path.exists(old_log_dir):
+            os.makedirs(new_log_dir)
         self.config["LOG_DIR"] = new_log_dir
 
         with self.assertRaises(Exception):
@@ -134,7 +133,7 @@ class TestLogAnalyzer(unittest.TestCase):
                               f"report-{yy}-{mm:02d}-{dd:02d}.html")
 
         self.assertTrue(os.path.exists(fn_out))
-        # os.system(f"rm {fn_out}")
+        os.system(f"rm {fn_out}")
 
     def test_report_from_plain(self):
         """Check that .html file with requred name was build from .gz."""

@@ -46,7 +46,7 @@ def generate_logs(fn_from, dest_dir, n_logs=10):
 
         ry = random.randint(2000, 2020)
         rm = random.randint(1, 12)
-        rd = random.randint(1, 30)
+        rd = random.randint(1, 29)
         gz_format = random.randrange(2)
 
         if gz_format:
@@ -55,7 +55,7 @@ def generate_logs(fn_from, dest_dir, n_logs=10):
                 for line in lines_samples:
                     f.write(line.encode())
         else:
-            fn = f"nginx-access.log-{ry}{rm:02d}{rd:02d}"
+            fn = f"nginx-access.log-{ry}{rm:02d}{rd:02d}.log"
             with open(os.path.join(dest_dir, fn), 'w') as f:
                 f.writelines(lines_samples)
 
