@@ -7,18 +7,58 @@ from log_analyzer import select_recent_log, build_report
 from utils import generate_logs
 
 
+def get_cur_date():
+    """Return current yyyy, mm, dd. """
+    dt = datetime.today()
+    return dt.year, dt.month, dt.day
+
+
 def convert_plain_to_gz(fn):
     with open(fn, 'r') as f:
         data = f.read()
     with gzip.open(fn + ".gz", 'wb') as f:
-        f.write(bytes(data))
+        f.write(data.encode())
+    os.system(f"rm {fn}")
 
 
 def convert_gz_to_plain(fn):
     with gzip.open(fn, 'rb') as f:
-        data = str(f.read())
+        data = f.read().decode("utf-8")
     with open(fn[:-3], 'w') as f:
         f.write(data)
+    os.system(f"rm {fn}")
+
+
+def broke_log(fn_source, fn_out, broke_perc):
+    """Create log file with given percentage of broken
+    records.
+
+    Args:
+        fn_source (str): path to the source log.
+        fn_out (str): path to the modified log.
+        broke_perc (float): percentage of broken records (0..1).
+
+    Function will rewirte first records with incorrect data.
+    """
+    # Open gz or plain file and save str lines
+    def fopen(x, m='r'):
+        return gzip.open(x, f'{m}b') if x.endswith('.gz') else open(x, m)
+    with fopen(fn_source) as f:
+        lines = f.readlines()
+    if fn_source.endswith("gz"):
+        lines = list(map(lambda x: x.decode('utf-8'), lines))
+
+    # Store broken and original lines to output file
+    store_binary = fn_out.endswith('gz')
+
+    for i in range(int(broke_perc * len(lines))):
+        lines[i] = "broken\n"
+    with fopen(fn_out, 'w') as f:
+        for l in lines:
+            if store_binary:
+                f.write(l.encode())
+            else:
+                f.write(l)
 
 
 class TestLogAnalyzer(unittest.TestCase):
@@ -30,6 +70,7 @@ class TestLogAnalyzer(unittest.TestCase):
             "REPORT_TEMPLATE": "report.html",
             "LOG_DIR": "./test_data/log",
             "LOG": None,
+            "ERROR_RATE_THRESHOLD": 0.7
         }
         if not os.path.exists(cls.config["LOG_DIR"]):
             print("Generating test logs...")
@@ -39,6 +80,30 @@ class TestLogAnalyzer(unittest.TestCase):
             print("Test logs exists. Skipping generation.")
         if not os.path.exists(cls.config["REPORT_DIR"]):
             os.makedirs(cls.config["REPORT_DIR"])
+
+    def test_no_dir_exists(self):
+        """Test that if given directory with logs no exists. """
+        old_log_dir = self.config["LOG_DIR"]
+        new_log_dir = "noexisting"
+        self.config["LOG_DIR"] = new_log_dir
+
+        with self.assertRaises(Exception):
+            build_report(self.config)
+        self.config["LOG_DIR"] = old_log_dir
+
+    def test_no_logs_exist(self):
+        """Test scenario when no logs for processing exist. """
+        # Create new empty directory
+        old_log_dir = self.config["LOG_DIR"]
+        new_log_dir = "./test_data/wrong_log_dir"
+        if not os.path.exists(new_log_dir):
+            os.makedirs(new_log_dir)
+        self.config["LOG_DIR"] = new_log_dir
+
+        # No exceptions should be raised
+        build_report(self.config)
+
+        self.config["LOG_DIR"] = old_log_dir
 
     def test_log_seletion(self):
         """Test should pick only .gz or .txt most recent report."""
@@ -75,3 +140,43 @@ class TestLogAnalyzer(unittest.TestCase):
         fn_out = os.path.join(self.config["REPORT_DIR"],
                               f"report-{yy}-{mm:02d}-{dd:02d}.html")
         self.assertTrue(os.path.exists(fn_out))
+
+    def test_sligthly_broken_log(self):
+        """Process report with 10% of broken records.
+        Report should be saved.
+        """
+        path = select_recent_log(self.config["LOG_DIR"])
+        log_name = "log-21000101.log.gz"
+        fn_log_out = os.path.join(self.config["LOG_DIR"], log_name)
+        broke_log(path, fn_log_out, broke_perc=0.1)
+
+        build_report(self.config)
+
+        # Check that file exists
+        yy, mm, dd = get_cur_date()
+        fn_report_out = os.path.join(self.config["REPORT_DIR"],
+                                     f"report-{yy}-{mm:02d}-{dd:02d}.html")
+        self.assertTrue(os.path.exists(fn_report_out))
+
+        # Clear
+        os.system(f"rm {fn_report_out}; rm {fn_log_out}")
+
+    def test_mostly_broken_log(self):
+        """Process report with 10% of broken records.
+        Report should be saved.
+        """
+        path = select_recent_log(self.config["LOG_DIR"])
+        log_name = "my.log-21000101.gz"
+        fn_log_out = os.path.join(self.config["LOG_DIR"], log_name)
+        broke_log(path, fn_log_out, broke_perc=0.9)
+
+        build_report(self.config)
+
+        # Check that file exists
+        yy, mm, dd = get_cur_date()
+        fn_report_out = os.path.join(self.config["REPORT_DIR"],
+                                     f"report-{yy}-{mm:02d}-{dd:02d}.html")
+        self.assertFalse(os.path.exists(fn_report_out))
+
+        # Clear
+        os.system(f"rm {fn_report_out}; rm {fn_log_out}")

@@ -10,6 +10,7 @@ config = {
     "REPORT_SIZE": 1000,
     "REPORT_DIR": "./reports",
     "REPORT_TEMPLATE": "report.html",
+    "ERROR_RATE_THRESHOLD": 0.7,
     "LOG_DIR": "./log",
     "LOG": None,
 }
@@ -61,17 +62,23 @@ def parse_line(s):
         s (str): log line.
 
     Returns:
-        dict: dict with keys as log item name.
+        dict: dict with keys as log item name or None in case of exception.
     """
-    item_names = ["remote_addr", "remote_user", "http_x_real_ip", "time_local",
-                  "request", "status", "body_bytes_sent", "http_referer",
-                  "http_user_agent", "http_x_forwarded_for",
-                  "http_X_REQUEST_ID", "http_X_RB_USER", "request_time"]
-    item_vals = split_by_space(s)
-    return {k: v for k, v in zip(item_names, item_vals)}
+    try:
+        item_names = ["remote_addr", "remote_user", "http_x_real_ip",
+                      "time_local", "request", "status", "body_bytes_sent",
+                      "http_referer", "http_user_agent",
+                      "http_x_forwarded_for", "http_X_REQUEST_ID",
+                      "http_X_RB_USER", "request_time"]
+        item_vals = split_by_space(s)
+        raw_record = {k: v for k, v in zip(item_names, item_vals)}
+        processed_record = process_log_record(raw_record)
+        return processed_record
+    except Exception:
+        return None
 
 
-def process_log_line(log_dict):
+def process_log_record(log_dict):
     """
     Process elements of log line.
 
@@ -174,26 +181,43 @@ def parse_json(stats, config):
 def select_recent_log(log_dir):
     """Select most recent log from given directory.
 
+    Given directory should exist.
     Selection will look only in the given folder non-recursevely.
-    Logs have format of logname-yyyymmdd.log[.gz]
+    Logs have format of logname-yyyymmdd.log[.gz].
+    If directory contains no suitable log files, return None.
 
     Args:
         log_dir (str): direcotry with logs.
 
     Returns:
-        str: path to the most recent log.
+        str: path to the most recent log or None if no logs exist.
     """
-    fns = {}
-    for root, _, files in os.walk(log_dir):
-        for fn in files:
-            if fn.endswith('.gz') or fn.endswith('.txt'):
-                datestr = fn[fn.rfind('-')+1:fn.rfind('.')]
-            else:
-                datestr = fn[fn.rfind('-')+1:]
-            k = os.path.join(root, fn)
-            v = date(int(datestr[:4]), int(datestr[4:6]), int(datestr[6:8]))
-            fns[k] = v
-    return max(fns)
+    def gz_or_plain(s):
+        i = s.rfind('.')
+        # In case of plain text mandatory dot would have multiple
+        # characters after it
+        if s[i:] == ".gz" or len(s)-i > 5:
+            return True
+        return False
+
+    path = ""
+    max_date = date(1900, 1, 1)
+    fns = [f for f in os.listdir(log_dir) if gz_or_plain(f)]
+    for fn in fns:
+        if fn.endswith('.gz') or fn.endswith('.txt'):
+            datestr = fn[fn.rfind('-')+1:fn.rfind('.')]
+        else:
+            datestr = fn[fn.rfind('-')+1:]
+        k = os.path.join(log_dir, fn)
+        v = date(int(datestr[:4]), int(datestr[4:6]), int(datestr[6:8]))
+        if v > max_date:
+            max_date = v
+            path = k
+
+    if len(path) == 0:
+        logging.warning("No logs found.")
+        return None
+    return path
 
 
 def build_report(config):
@@ -202,16 +226,38 @@ def build_report(config):
     Args:
         config (dict): configuration file.
     """
+    # Check that direcory in config exists
+    if not os.path.exists(config["LOG_DIR"]):
+        raise Exception(f"Directory {config['LOG_DIR']} not exists")
+
     path = select_recent_log(config["LOG_DIR"])
+    if path is None:
+        return
     logging.info(f"Processing {path}")
 
+    i_record = 0
+    n_broke_records = 0
     data = []
     with open_logfile(path) as f:
-        for i, line in enumerate(f.readlines()):
-            if (i+1) % 100_000 == 0:
-                logging.info(f"Processed {i+1} records")
-            data.append(process_log_line(parse_line(str(line))))
-    logging.info("Log was parsed successfully.")
+        for line in f.readlines():
+            i_record += 1
+            if i_record % 100_000 == 0:
+                logging.info(f"Processed {i_record+1} records")
+            if isinstance(line, bytes):
+                line = line.decode('utf-8')
+            parsed_record = parse_line(line)
+            if parsed_record is None:
+                n_broke_records += 1
+            else:
+                data.append(parsed_record)
+
+    # Check parsing error rate
+    error_rate = n_broke_records / i_record
+    if error_rate > config["ERROR_RATE_THRESHOLD"]:
+        logging.exception(f"Parsing error rate is {error_rate}. Exiting...")
+        return
+    elif error_rate > 0:
+        logging.warning(f"Parsing error rate is {error_rate}")
 
     logging.info(f"Log contains {len(data)} records")
     stats = analyze_log(data)
