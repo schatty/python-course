@@ -78,8 +78,13 @@ class TestLogAnalyzer(unittest.TestCase):
             generate_logs("log-10k-20190102.gz", cls.config["LOG_DIR"], 10)
         else:
             print("Test logs exists. Skipping generation.")
-        if not os.path.exists(cls.config["REPORT_DIR"]):
-            os.makedirs(cls.config["REPORT_DIR"])
+            if not os.path.exists(cls.config["REPORT_DIR"]):
+                os.makedirs(cls.config["REPORT_DIR"])
+
+    @classmethod
+    def tearDownClass(cls):
+        os.system(f"rm -r {cls.config['LOG_DIR']}")
+        os.system(f"rm -r {cls.config['REPORT_DIR']}")
 
     def test_no_dir_exists(self):
         """Test that if given directory with logs no exists. """
@@ -90,6 +95,7 @@ class TestLogAnalyzer(unittest.TestCase):
         with self.assertRaises(Exception):
             build_report(self.config)
         self.config["LOG_DIR"] = old_log_dir
+        os.system(f"rm -r {new_log_dir}")
 
     def test_no_logs_exist(self):
         """Test scenario when no logs for processing exist. """
@@ -104,6 +110,7 @@ class TestLogAnalyzer(unittest.TestCase):
         build_report(self.config)
 
         self.config["LOG_DIR"] = old_log_dir
+        os.system(f"rm -r {new_log_dir}")
 
     def test_log_seletion(self):
         """Test should pick only .gz or .txt most recent report."""
@@ -112,40 +119,42 @@ class TestLogAnalyzer(unittest.TestCase):
         with open(fn, 'wb') as f:
             f.write(b"...")
 
-        path = select_recent_log(self.config["LOG_DIR"])
+        path, _ = select_recent_log(self.config["LOG_DIR"])
         self.assertNotEqual(path, fn)
 
     def test_report_from_gz(self):
         """Check that .html file with requred name was build from .gz."""
-        path = select_recent_log(self.config["LOG_DIR"])
+        path, dt = select_recent_log(self.config["LOG_DIR"])
         if not path.endswith(".gz"):
             convert_plain_to_gz(path)
         build_report(self.config)
 
-        dt = datetime.today()
         yy, mm, dd = dt.year, dt.month, dt.day
         fn_out = os.path.join(self.config["REPORT_DIR"],
                               f"report-{yy}-{mm:02d}-{dd:02d}.html")
+
         self.assertTrue(os.path.exists(fn_out))
+        # os.system(f"rm {fn_out}")
 
     def test_report_from_plain(self):
         """Check that .html file with requred name was build from .gz."""
-        path = select_recent_log(self.config["LOG_DIR"])
+        path, dt = select_recent_log(self.config["LOG_DIR"])
         if path.endswith(".gz"):
             convert_gz_to_plain(path)
         build_report(self.config)
 
-        dt = datetime.today()
         yy, mm, dd = dt.year, dt.month, dt.day
         fn_out = os.path.join(self.config["REPORT_DIR"],
                               f"report-{yy}-{mm:02d}-{dd:02d}.html")
+
         self.assertTrue(os.path.exists(fn_out))
+        os.system(f"rm {fn_out}")
 
     def test_sligthly_broken_log(self):
         """Process report with 10% of broken records.
         Report should be saved.
         """
-        path = select_recent_log(self.config["LOG_DIR"])
+        path, dt = select_recent_log(self.config["LOG_DIR"])
         log_name = "log-21000101.log.gz"
         fn_log_out = os.path.join(self.config["LOG_DIR"], log_name)
         broke_log(path, fn_log_out, broke_perc=0.1)
@@ -153,19 +162,17 @@ class TestLogAnalyzer(unittest.TestCase):
         build_report(self.config)
 
         # Check that file exists
-        yy, mm, dd = get_cur_date()
+        yy, mm, dd = 2100, 1, 1
         fn_report_out = os.path.join(self.config["REPORT_DIR"],
                                      f"report-{yy}-{mm:02d}-{dd:02d}.html")
         self.assertTrue(os.path.exists(fn_report_out))
-
-        # Clear
         os.system(f"rm {fn_report_out}; rm {fn_log_out}")
 
     def test_mostly_broken_log(self):
         """Process report with 10% of broken records.
         Report should be saved.
         """
-        path = select_recent_log(self.config["LOG_DIR"])
+        path, dt = select_recent_log(self.config["LOG_DIR"])
         log_name = "my.log-21000101.gz"
         fn_log_out = os.path.join(self.config["LOG_DIR"], log_name)
         broke_log(path, fn_log_out, broke_perc=0.9)
@@ -173,10 +180,9 @@ class TestLogAnalyzer(unittest.TestCase):
         build_report(self.config)
 
         # Check that file exists
-        yy, mm, dd = get_cur_date()
+        yy, mm, dd = 2100, 1, 1
         fn_report_out = os.path.join(self.config["REPORT_DIR"],
                                      f"report-{yy}-{mm:02d}-{dd:02d}.html")
-        self.assertFalse(os.path.exists(fn_report_out))
 
-        # Clear
+        self.assertFalse(os.path.exists(fn_report_out))
         os.system(f"rm {fn_report_out}; rm {fn_log_out}")

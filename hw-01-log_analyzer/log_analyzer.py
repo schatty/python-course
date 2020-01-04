@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from string import Template
 from datetime import date
 import gzip
 from collections import defaultdict
@@ -47,6 +47,15 @@ def split_by_space(s, item_symbols=("\"", "[", "]")):
     if len(s) - 1 - i_start > 0:
         items.append(s[i_start:i])
     return items
+
+
+def read_log(f):
+    """Generator for reading log file. """
+    while True:
+        record = f.readline()
+        if not record:
+            break
+        yield record
 
 
 def parse_line(s):
@@ -99,12 +108,6 @@ def process_log_record(log_dict):
     return log_dict
 
 
-def open_logfile(path):
-    if path.endswith(".gz"):
-        return gzip.open(path, 'rb')
-    return open(path, 'r')
-
-
 def calc_median(vals):
     vals_sorted = sorted(vals)
     mi = len(vals) // 2
@@ -115,11 +118,27 @@ def calc_median(vals):
     return median
 
 
-def analyze_log(data):
+def select_max_records(data, target_key, limit):
+    """Modify data to remain only records with maximim values.
+
+    Args:
+        data (list): list of dicts.
+        target_key (str): name of the key to sort.
+        limit (int): final number of records.
+
+    Returns:
+        list: list of dicts.
+    """
+    sorted_data = sorted(data, key=lambda x: x[target_key])
+    return sorted_data[:limit]
+
+
+def analyze_log(data, n_limit):
     """Process stats from given log data.
 
     Args:
         data (list): list of dicts of records.
+        n_limit (int): maximum number of records.
 
     Returns:
         list: list of dicts with record stats.
@@ -148,34 +167,36 @@ def analyze_log(data):
             "min": min(time_dict[req]['request_time'])
         })
 
+    # Leave only top records
+    if len(stats) > n_limit:
+        stats = select_max_records(stats, "time_sum", n_limit)
+
     return stats
 
 
-def parse_json(stats, config):
+def parse_json(stats, config, log_date):
     """Parse json stats to the html report.
 
     Args:
         stats (list): list of dicts with stats.
         config (dict): configuration.
+        log_date (date): date of log generation (used in report name).
     """
     if not os.path.exists(config["REPORT_DIR"]):
         os.makedirs(config["REPORT_DIR"])
-    date = str(datetime.date(datetime.now()))
-    fn = f"report-{date}.html"
+    fn = f"report-{str(log_date)}.html"
     report_path = os.path.join(config["REPORT_DIR"], fn)
     logging.info(f"Report destination path: {report_path}")
 
     with open(config["REPORT_TEMPLATE"], "r") as f:
         report_html = f.read()
+    report_html = Template(report_html)
 
-    target_tag = "$table_json"
-    ind_start = report_html.find(target_tag)
-    report_out = report_html[:ind_start] + str(stats) + \
-        report_html[ind_start+len(target_tag):]
+    report_out = str(report_html.safe_substitute(table_json=str(stats)))
 
     with open(report_path, 'w') as f:
         f.write(report_out)
-    logging.warning(f"Report has been written successfully.")
+    logging.info(f"Report has been written successfully.")
 
 
 def select_recent_log(log_dir):
@@ -190,7 +211,8 @@ def select_recent_log(log_dir):
         log_dir (str): direcotry with logs.
 
     Returns:
-        str: path to the most recent log or None if no logs exist.
+        (str, date): path to the most recent log or None if no logs exist,
+            date of of selected log.
     """
     def gz_or_plain(s):
         i = s.rfind('.')
@@ -216,8 +238,16 @@ def select_recent_log(log_dir):
 
     if len(path) == 0:
         logging.warning("No logs found.")
-        return None
-    return path
+        return None, None
+    return path, max_date
+
+
+def check_existing_report(log_dir, dt):
+    """Returns True if report already exists. """
+    fn = f"{os.path.join(log_dir, str(dt))}"
+    if os.path.exists(fn):
+        return True
+    return False
 
 
 def build_report(config):
@@ -230,16 +260,19 @@ def build_report(config):
     if not os.path.exists(config["LOG_DIR"]):
         raise Exception(f"Directory {config['LOG_DIR']} not exists")
 
-    path = select_recent_log(config["LOG_DIR"])
+    path, log_date = select_recent_log(config["LOG_DIR"])
     if path is None:
         return
+    if check_existing_report(config["REPORT_DIR"], log_date):
+        logging.warning(f"Report from {log_date} already exists. Exiting.")
     logging.info(f"Processing {path}")
 
     i_record = 0
     n_broke_records = 0
     data = []
-    with open_logfile(path) as f:
-        for line in f.readlines():
+    is_gz = path.endswith("gz")
+    with gzip.open(path, 'rb') if is_gz else open(path, "r") as f:
+        for line in read_log(f):
             i_record += 1
             if i_record % 100_000 == 0:
                 logging.info(f"Processed {i_record+1} records")
@@ -260,13 +293,17 @@ def build_report(config):
         logging.warning(f"Parsing error rate is {error_rate}")
 
     logging.info(f"Log contains {len(data)} records")
-    stats = analyze_log(data)
+    stats = analyze_log(data, config["REPORT_SIZE"])
     logging.info(f"Stats contains {len(stats)} requests")
-    parse_json(stats, config)
+    parse_json(stats, config, log_date)
 
 
 def main():
-    build_report(config)
+    try:
+        build_report(config)
+    except Exception as e:
+        logging.exception(e)
+        raise e
 
 
 if __name__ == "__main__":
