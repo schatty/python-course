@@ -69,12 +69,13 @@ class TestLogAnalyzer(unittest.TestCase):
             "REPORT_DIR": "./test_data/reports",
             "REPORT_TEMPLATE": "report.html",
             "LOG_DIR": "./test_data/log",
-            "LOG": None,
+            "LOG": "",
             "ERROR_RATE_THRESHOLD": 0.7
         }
         if not os.path.exists(cls.config["LOG_DIR"]):
             os.makedirs(cls.config["LOG_DIR"])
-        generate_logs("log-10k-20190102.gz", cls.config["LOG_DIR"], 10)
+        generate_logs("nginx-access-ui.log-20170630.gz",
+                      cls.config["LOG_DIR"], 10)
         if not os.path.exists(cls.config["REPORT_DIR"]):
             os.makedirs(cls.config["REPORT_DIR"])
 

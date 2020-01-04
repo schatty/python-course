@@ -40,7 +40,7 @@ def generate_logs(fn_from, dest_dir, n_logs=10):
     lines = list(map(lambda x: x.decode('utf-8'), lines))
 
     for _ in range(n_logs):
-        n = random.randrange(100, len(lines))
+        n = random.randrange(100, 10_000)
         inds = [random.randrange(len(lines)) for _ in range(n)]
         lines_samples = [lines[i] for i in inds]
 

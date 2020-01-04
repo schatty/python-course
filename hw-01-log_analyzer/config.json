@@ -1,0 +1,8 @@
+{
+    "REPORT_SIZE": 1000,
+    "REPORT_DIR": "./reports",
+    "REPORT_TEMPLATE": "report.html",
+    "ERROR_RATE_THRESHOLD": 0.7,
+    "LOG_DIR": "./log",
+    "LOG": "log_analyzer.log"
+}

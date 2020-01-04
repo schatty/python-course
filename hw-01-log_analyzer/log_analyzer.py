@@ -243,6 +243,12 @@ def build_report(config):
     Args:
         config (dict): configuration file.
     """
+    # Set up logging
+    kwargs = {"filename": config["LOG"]} if len(config["LOG"]) != 0 else {}
+    logging.basicConfig(format="[%(asctime)s] %(levelname).1s %(message)s",
+                        datefmt="%Y.%m.%d %H:%M:%S", level=logging.INFO,
+                        **kwargs)
+
     # Check that direcory in config exists
     if not os.path.exists(config["LOG_DIR"]):
         raise Exception(f"Directory {config['LOG_DIR']} not exists")
@@ -331,14 +337,4 @@ def process_config(config_path):
 if __name__ == "__main__":
     args = parse_args()
     config = process_config(args.config)
-
-    # Set logging
-    if len(config["LOG"]) != 0:
-        kwargs = {"filename": config["LOG"]}
-    else:
-        kwargs = {}
-    logging.basicConfig(format="[%(asctime)s] %(levelname).1s %(message)s",
-                        datefmt="%Y.%m.%d %H:%M:%S", level=logging.INFO,
-                        **kwargs)
-
     main(config)
