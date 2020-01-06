@@ -27,7 +27,7 @@
 # Можно свободно определять свои функции и т.п.
 # -----------------
 
-from itertools import combinations
+from itertools import product, combinations
 from collections import Counter
 
 
@@ -80,7 +80,7 @@ def flush(hand):
     return sum([get_suite(c) == suite for c in hand]) == len(hand)
 
 
-def straight(ranks):
+def straight(ranks, k=5):
     """Возвращает True, если отсортированные ранги формируют последовательность 5ти,
     где у 5ти карт ранги идут по порядку (стрит)"""
     def pair(c1, c2):
@@ -89,7 +89,7 @@ def straight(ranks):
         return '0'
 
     neighbours = ''.join([pair(ranks[i], ranks[i+1]) for i in range(len(ranks)-1)])
-    return neighbours.find("11111") != -1    
+    return neighbours.find("1"*k) != -1    
 
 
 def kind(n, ranks):
@@ -117,11 +117,18 @@ def compare_rank_info(info, best_rank):
     """Returns True if info is better than best_rank. """
     if best_rank is None:
         return True
-    if info[0] == best_rank[0] == 6:
+    # If got two flushes pick one with straight property
+    if info[0] == best_rank[0] == 5:
+        return straight(info[1], 4) and not  straight(best_rank[1], 4)
+    elif info[0] == best_rank[0] == 6:
         if info[1] > best_rank[1]:
             return True
         elif info[1] == best_rank[1]:
-            return info[2] > best_rank[2]
+           return info[2] > best_rank[2]
+    # In case of Kind select one with the highest ranks
+    elif info[0] == best_rank[0] == 7:
+        if sum(info[1:]) > sum(best_rank[1:]):
+            return True
     return info[0] > best_rank[0]
 
 
@@ -137,10 +144,47 @@ def best_hand(hand):
     return bhand
 
 
+def hand_options(hand, joker):
+    if joker not in hand:
+        return []
+    ranks = list(map(str, range(2, 10))) + ['T', 'J', 'Q', 'K', 'A']
+    suites = ['C', 'S'] if joker == '?B' else ['H', 'W']
+    joker_replacements = list(map(lambda x: ''.join(x), product(ranks, suites)))
+    hands = []
+    for wildcard in joker_replacements:
+        if wildcard not in hand:
+            new_hand = hand[:]
+            new_hand.remove(joker)
+            new_hand.append(wildcard)
+            hands.append(new_hand)
+    return hands
+
+
 def best_wild_hand(hand):
     """best_hand но с джокерами"""
-    return
+    if "?B" in hand and "?R" in hand:
+        hands = []
+        hands_b = hand_options(hand, '?B')
+        for hb in hands_b:
+            hands += hand_options(hb, '?R')
+    elif "?B" in hand:
+        hands = hand_options(hand, '?B')
+    elif "?R" in hand:
+        hands = hand_options(hand, '?R') 
+    else:
+        return best_hand(hand)
 
+    # The same logic but on all joker-hands
+    best_rank = None
+    bhand = None
+    for hand in hands:
+        for hand5 in combinations(hand, 5):
+            rank_info = hand_rank(hand5)
+            if compare_rank_info(rank_info, best_rank):
+                best_rank = rank_info
+                bhand = hand5
+    return bhand
+    
 
 def test_best_hand():
     print("test_best_hand...")
@@ -156,7 +200,7 @@ def test_best_hand():
 def test_best_wild_hand():
     print("test_best_wild_hand...")
     assert (sorted(best_wild_hand("6C 7C 8C 9C TC 5C ?B".split()))
-            == ['7C', '8C', '9C', 'JC', 'TC'])
+            == ['6C', '7C', '8C', '9C', 'TC'])
     assert (sorted(best_wild_hand("TD TC 5H 5C 7C ?R ?B".split()))
             == ['7C', 'TC', 'TD', 'TH', 'TS'])
     assert (sorted(best_wild_hand("JD TC TH 7C 7D 7S 7H".split()))
@@ -166,4 +210,4 @@ def test_best_wild_hand():
 
 if __name__ == '__main__':
     test_best_hand()
-    # test_best_wild_hand()
+    test_best_wild_hand()
