@@ -1,30 +1,22 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 # -----------------
-# Реализуйте функцию best_hand, которая принимает на вход
-# покерную "руку" (hand) из 7ми карт и возвращает лучшую
-# (относительно значения, возвращаемого hand_rank)
-# "руку" из 5ти карт. У каждой карты есть масть(suit) и
-# ранг(rank)
-# Масти: трефы(clubs, C), пики(spades, S), червы(hearts, H), бубны(diamonds, D)
-# Ранги: 2, 3, 4, 5, 6, 7, 8, 9, 10 (ten, T), валет (jack, J), дама (queen, Q), король (king, K), туз (ace, A)
-# Например: AS - туз пик (ace of spades), TH - дестяка черв (ten of hearts), 3C - тройка треф (three of clubs)
-
-# Задание со *
-# Реализуйте функцию best_wild_hand, которая принимает на вход
-# покерную "руку" (hand) из 7ми карт и возвращает лучшую
-# (относительно значения, возвращаемого hand_rank)
-# "руку" из 5ти карт. Кроме прочего в данном варианте "рука"
-# может включать джокера. Джокеры могут заменить карту любой
-# масти и ранга того же цвета, в колоде два джокерва.
-# Черный джокер '?B' может быть использован в качестве треф
-# или пик любого ранга, красный джокер '?R' - в качестве черв и бубен
-# любого ранга.
-
-# Одна функция уже реализована, сигнатуры и описания других даны.
-# Вам наверняка пригодится itertools.
-# Можно свободно определять свои функции и т.п.
+# Implement best_hand function that takes poker "hand"
+# from 7 cards and returns the best (regarding to the
+# numeric value from hand_rank) hand of 5 cards. Each
+# card has a suit and a rank.
+# Suits: (clubs, C), (spades, S), (hearts, H), (diamonds, D)
+# Ranks: 2, 3, 4, 5, 6, 7, 8, 9, 10 (ten, T), jack (J),
+#        queen (Q), king (K), ace (A)
+# Example: AS (ace of spades), TH (ten of hearts), 3C (three of clubs)
+#
+# Excercise with a *
+# Implmement funtion best_wild_hand, that takes poker "hand"
+# from 7 cards and returns the best (regarding to the
+# numeric value from hand rank) hand of 5 cards. In this
+# excercise hand may include joker. Jokers can replace
+# card with any suite with corresponding color. The deck
+# has two jokers. Black jocker '?B' can be used as clubs
+# and spades of any rank, red joker '?R' as any hearts or
+# diamonds of any rank.
 # -----------------
 
 from itertools import product, combinations
@@ -69,43 +61,43 @@ def get_rank(card):
 
 
 def card_ranks(hand):
-    """Возвращает список рангов (его числовой эквивалент),
-    отсортированный от большего к меньшему"""
+    """Returns list of ranks (numeric value) sorted
+    from larger to smaller. """
     return sorted([get_rank(c) for c in hand], reverse=True)
 
 
 def flush(hand):
-    """Возвращает True, если все карты одной масти"""
+    """Returns True if all cards are the same suite. """
     suite = get_suite(hand[0])
     return sum([get_suite(c) == suite for c in hand]) == len(hand)
 
 
 def straight(ranks, k=5):
-    """Возвращает True, если отсортированные ранги формируют последовательность 5ти,
-    где у 5ти карт ранги идут по порядку (стрит)"""
+    """Returns True if sorted ranks form a sequence of 5 cards,
+    where ranks are in natural order (street). """
     def pair(c1, c2):
         if (c2 - c1) == 1:
             return '1'
         return '0'
 
-    neighbours = ''.join([pair(ranks[i], ranks[i+1]) for i in range(len(ranks)-1)])
-    return neighbours.find("1"*k) != -1    
+    neighbours = ''.join([pair(ranks[i], ranks[i+1])
+                         for i in range(len(ranks)-1)])
+    return neighbours.find("1"*k) != -1
 
 
 def kind(n, ranks):
-    """Возвращает первый ранг, который n раз встречается в данной руке.
-    Возвращает None, если ничего не найдено"""
+    """Returns the first rank that encountered in hand for n times.
+    Returns None, if no such repeats exist."""
     cnt = Counter(ranks)
     best_rank = 0
     for k, v in cnt.items():
-        if v ==  n and k > best_rank:
+        if v == n and k > best_rank:
             best_rank = k
     return best_rank
 
 
 def two_pair(ranks):
-    """Если есть две пары, то возврщает два соответствующих ранга,
-    иначе возвращает None"""
+    """Return True if two pairs exists, None othewise. """
     cnt_ranks = Counter(ranks)
     cnt_repeats = Counter(cnt_ranks.values())
     if not (2 in cnt_repeats.keys()):
@@ -119,12 +111,12 @@ def compare_rank_info(info, best_rank):
         return True
     # If got two flushes pick one with straight property
     if info[0] == best_rank[0] == 5:
-        return straight(info[1], 4) and not  straight(best_rank[1], 4)
+        return straight(info[1], 4) and not straight(best_rank[1], 4)
     elif info[0] == best_rank[0] == 6:
         if info[1] > best_rank[1]:
             return True
         elif info[1] == best_rank[1]:
-           return info[2] > best_rank[2]
+            return info[2] > best_rank[2]
     # In case of Kind select one with the highest ranks
     elif info[0] == best_rank[0] == 7:
         if sum(info[1:]) > sum(best_rank[1:]):
@@ -133,7 +125,7 @@ def compare_rank_info(info, best_rank):
 
 
 def best_hand(hand):
-    """Из "руки" в 7 карт возвращает лучшую "руку" в 5 карт """
+    """Returns the best hand of 5 cards from the hand of 7 cards. """
     best_rank = None
     bhand = None
     for hand5 in combinations(hand, 5):
@@ -145,11 +137,12 @@ def best_hand(hand):
 
 
 def hand_options(hand, joker):
+    """Return list of all possible hands introduced by joker ("?B", "?R"). """
     if joker not in hand:
         return []
     ranks = list(map(str, range(2, 10))) + ['T', 'J', 'Q', 'K', 'A']
     suites = ['C', 'S'] if joker == '?B' else ['H', 'W']
-    joker_replacements = list(map(lambda x: ''.join(x), product(ranks, suites)))
+    joker_replacements = map(lambda x: ''.join(x), product(ranks, suites))
     hands = []
     for wildcard in joker_replacements:
         if wildcard not in hand:
@@ -161,7 +154,7 @@ def hand_options(hand, joker):
 
 
 def best_wild_hand(hand):
-    """best_hand но с джокерами"""
+    """best_hand but with jokers. """
     if "?B" in hand and "?R" in hand:
         hands = []
         hands_b = hand_options(hand, '?B')
@@ -170,7 +163,7 @@ def best_wild_hand(hand):
     elif "?B" in hand:
         hands = hand_options(hand, '?B')
     elif "?R" in hand:
-        hands = hand_options(hand, '?R') 
+        hands = hand_options(hand, '?R')
     else:
         return best_hand(hand)
 
@@ -184,7 +177,7 @@ def best_wild_hand(hand):
                 best_rank = rank_info
                 bhand = hand5
     return bhand
-    
+
 
 def test_best_hand():
     print("test_best_hand...")
