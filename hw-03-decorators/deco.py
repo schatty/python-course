@@ -1,7 +1,6 @@
-from functools import wraps
 
 
-def disable():
+def disable(func):
     '''
     Disable a decorator by re-assigning the decorator's name
     to this function. For example, to turn off memoization:
@@ -9,17 +8,26 @@ def disable():
     >>> memo = disable
 
     '''
-    return
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
 
 
-def decorator():
+def decorator(func):
     '''
     Decorate a decorator so that it inherits the docstrings
     and stuff from the function it's decorating.
     '''
-    return
+    def wrapper(*args, **kwargs):
+        wrapped = args[0]
+        for attr in wrapped.__dict__:
+            setattr(wrapper, attr, wrapped.__dict__[attr])
+        res = func(*args, **kwargs)
+        return res
+    return wrapper
 
 
+@decorator
 def countcalls(func):
     '''Decorator that counts calls made to the function decorated.'''
     def wrapper(*args, **kwargs):
@@ -31,11 +39,12 @@ def countcalls(func):
     return wrapper
 
 
+@decorator
 def memo(func):
     ''' Memoize a function so that it caches all
     return values for faster future lookups.  '''
     cache = {}
-    @wraps(func)
+
     def wrapper(*args, **kwargs):
         lookup = tuple(list(args) +
                        [f"{k}{kwargs[k]}" for k in sorted(kwargs)])
@@ -46,9 +55,14 @@ def memo(func):
         cache[lookup] = res
         return res
 
+    # transfer all inherited memo's attrs to wrapper
+    for attr in memo.__dict__:
+        setattr(wrapper, attr, memo.__dict__[attr])
+
     return wrapper
 
 
+@decorator
 def n_ary(func):
     '''
     Given binary function f(x, y), return an n_ary function such
@@ -126,6 +140,7 @@ def main():
     print(foo(4, 3))
     print(foo(4, 3, 2))
     print(foo(4, 3))
+    print("Foo dict: ", foo.__dict__)
     print("foo was called", foo.calls, "times")
 
     print(bar(4, 3))
